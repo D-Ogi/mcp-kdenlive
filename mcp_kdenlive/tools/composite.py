@@ -171,7 +171,7 @@ def register(mcp, helpers):
         and neighboring transitions.
 
         Args:
-            scene_number: Scene number (1-based, e.g. 1-38).
+            scene_number: Scene number (1-based).
             new_file: Absolute path to the replacement video file.
         """
         import time

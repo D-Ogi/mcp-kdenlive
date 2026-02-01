@@ -1,8 +1,7 @@
 """MCP Prompts — user-facing slash commands bundled with the server.
 
-These appear as /mcp__kdenlive__<name> in Claude Code.
-Note: as of Jan 2026, the model cannot see or invoke Prompts autonomously
-(bug #11054). These are user-facing only. The model uses composite tools instead.
+Prompts are user-facing slash commands that MCP clients can present to the user.
+The model uses composite tools instead for autonomous operation.
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ def register(mcp: FastMCP):
             transition_frames: Cross-dissolve length in frames (default 13).
         """
         parts = [
-            "You are assembling a music video timeline in Kdenlive.",
+            "You are assembling a video timeline in Kdenlive.",
             "",
             "Use the `build_timeline` tool with these parameters:",
             f'- video_dir: "{video_dir}"',
@@ -49,7 +48,7 @@ def register(mcp: FastMCP):
         """Replace a single scene clip preserving position, duration and neighboring transitions.
 
         Args:
-            scene_number: Scene number (1-38).
+            scene_number: Scene number (1-based).
             new_file: Path to replacement video file.
         """
         return (

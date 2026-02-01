@@ -1,6 +1,6 @@
 # mcp-kdenlive
 
-MCP server for Kdenlive — wraps [kdenlive-api](https://github.com/D-Ogi/kdenlive-api) for Claude Code and other LLM agents.
+MCP server for Kdenlive — wraps [kdenlive-api](https://github.com/D-Ogi/kdenlive-api) for LLM agents and AI assistants.
 
 Gives an AI agent full NLE control over a running Kdenlive instance via D-Bus: import media, build timelines, add transitions, markers, effects, and render.
 
