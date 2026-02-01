@@ -13,15 +13,17 @@ COOKBOOK = """\
    - Imports all matching clips, sequences them, adds transitions + markers + audio
    - Returns clip table with timecodes
 2. Verify with `get_timeline_summary()`
-3. Fix issues with atomic tools: `insert_clip`, `move_clip`, `trim_clip`, `delete_clip`
-4. Save with `save_project()`
+3. **Visual check**: `render_frame(frame)` on a few key frames (first, middle, last scene)
+4. Fix issues with atomic tools: `insert_clip`, `move_clip`, `trim_clip`, `delete_clip`
+5. Save with `save_project()`
 
 ## Workflow: Replace a Scene
 
 1. Call `replace_scene(scene_number, new_file)`
    - Imports new clip, swaps it in at the same position/duration
 2. Verify with `get_timeline_summary()`
-3. Re-add transitions if needed: `add_transition(clip_a, clip_b, 13)`
+3. **Visual check**: `render_frame()` at the replaced scene's start frame to confirm it looks correct
+4. Re-add transitions if needed: `add_transition(clip_a, clip_b, 13)`
 
 ## Workflow: Add Transitions
 
@@ -42,6 +44,30 @@ COOKBOOK = """\
 1. Before risky operations: `checkpoint_save(label)`
 2. If something goes wrong: `checkpoint_restore(label)`
 3. Checkpoints are saved as copies of the .kdenlive project file
+
+## Workflow: Visual Preview & QC
+
+Preview tools return JPEG file paths. Read the file to display the image.
+
+**When to use preview proactively (do this without being asked):**
+- After `replace_scene` → `render_frame()` at that scene's start frame
+- After `build_timeline` → `render_frame()` on 2-3 key frames
+- When evaluating a new clip before inserting → `render_bin_frame()` or `render_contact_sheet()`
+- When comparing two clips/scenes → `render_crop()` on the same region of both frames
+- When user asks about visual quality, consistency, or artifacts → `render_crop()` on the area of interest
+
+**Tools:**
+- `render_frame(frame)` — composited timeline thumbnail (all tracks + effects + transitions)
+- `render_bin_frame(bin_id, frame_position)` — single frame from a media pool clip ("first"/"middle"/"last"/int)
+- `render_contact_sheet(bin_id, num_frames=8)` — grid overview of a clip's motion over time
+- `render_crop(frame, region, crop_size=480)` — 1:1 pixel crop from timeline at native resolution
+  - Regions: "center", "top-third", "bottom-third", "left-third", "right-third"
+  - Or custom: `custom_x, custom_y, custom_w, custom_h` in pixels
+
+**Typical QC checks:**
+- Character identity consistency: `render_crop(region="center")` across scenes — compare face, outfit
+- Transition quality: `render_frame()` at transition midpoint (scene_start - transition_frames/2)
+- Edge matching: `render_crop()` on last frame of scene N and first frame of scene N+1
 
 ## ID System
 

@@ -109,10 +109,28 @@ def markers_table(markers: dict, fps: float = 25.0) -> str:
     return "\n".join(lines)
 
 
+def compositions_table(compositions: list, fps: float = 25.0) -> str:
+    """Build a markdown table from a list of composition dicts."""
+    header = "| id | type | track_id | start | end | dur |"
+    sep = "|----|------|----------|-------|-----|-----|"
+    lines = [header, sep]
+    for c in compositions:
+        cid = c.get("id", "")
+        ctype = c.get("type", "")
+        tid = c.get("trackId", "")
+        pos = int(c.get("position", 0))
+        dur = int(c.get("duration", 0))
+        end = pos + dur
+        start_tc = format_tc(pos, fps)
+        end_tc = format_tc(end, fps)
+        lines.append(f"| {cid} | {ctype} | {tid} | {start_tc} | {end_tc} | {dur} |")
+    return "\n".join(lines)
+
+
 def tracks_table(tracks: list) -> str:
     """Build a markdown table from GetAllTracksInfo() result."""
-    header = "| track_id | type | name | clips | total_frames |"
-    sep = "|----------|------|------|-------|--------------|"
+    header = "| track_id | type | name | clips | total_frames | mute |"
+    sep = "|----------|------|------|-------|--------------|------|"
     lines = [header, sep]
     for t in tracks:
         tid = t.get("id", t.get("track_id", ""))
@@ -121,5 +139,7 @@ def tracks_table(tracks: list) -> str:
         tname = t.get("name", "")
         nclips = t.get("clips", 0)
         total = t.get("total_frames", 0)
-        lines.append(f"| {tid} | {ttype} | {tname} | {nclips} | {total} |")
+        mute = t.get("mute")
+        mute_str = "yes" if mute in (True, "true") else "no"
+        lines.append(f"| {tid} | {ttype} | {tname} | {nclips} | {total} | {mute_str} |")
     return "\n".join(lines)
