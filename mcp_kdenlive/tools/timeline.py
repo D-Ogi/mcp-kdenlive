@@ -41,13 +41,11 @@ def register(mcp, helpers):
                     sections.append(f"## {label}{tid}{f' — {tname}' if tname else ''} — 0 clips")
                     continue
 
-                # Enrich clip dicts with info from scriptGetTimelineClipInfo
+                # Use clip dicts directly (C++ now returns name, binId, url)
                 clips_info = []
                 for cd in clip_dicts:
-                    cid = int(cd.get("id", cd.get("clip_id", -1)))
-                    info = dbus.get_timeline_clip_info(cid)
-                    info["clip_id"] = cid
-                    clips_info.append(info)
+                    cd["clip_id"] = int(cd.get("id", cd.get("clip_id", -1)))
+                    clips_info.append(cd)
 
                 total_frames = sum(int(c.get("duration", 0)) for c in clips_info)
                 total_tc = helpers.format_tc(total_frames, fps)
@@ -99,7 +97,7 @@ def register(mcp, helpers):
             if not tracks:
                 return "No tracks."
 
-            # Enrich with clip counts
+            # Enrich with clip counts (no per-clip D-Bus calls needed)
             enriched = []
             for t in tracks:
                 tid = int(t.get("id", t.get("track_id", 0)))
@@ -107,11 +105,7 @@ def register(mcp, helpers):
                 tname = t.get("name", "")
                 clip_dicts = dbus.get_clips_on_track(tid)
                 nclips = len(clip_dicts)
-                total = 0
-                for cd in clip_dicts:
-                    cid = int(cd.get("id", cd.get("clip_id", -1)))
-                    info = dbus.get_timeline_clip_info(cid)
-                    total += int(info.get("duration", 0)) if info else 0
+                total = sum(int(cd.get("duration", 0)) for cd in clip_dicts)
                 enriched.append({
                     "id": tid, "audio": is_audio,
                     "name": tname, "clips": nclips, "total_frames": total,
@@ -136,13 +130,17 @@ def register(mcp, helpers):
             if not info:
                 return f"ERROR: Clip {clip_id} not found."
 
-            s = info.get("start", 0)
-            e = info.get("end", 0)
-            d = info.get("duration", 0)
+            s = int(info.get("position", 0))
+            d = int(info.get("duration", 0))
+            e = s + d
             name = info.get("name", "")
-            track = info.get("track_id", "")
-            bin_id = info.get("bin_id", "")
-            in_pt = info.get("in_point", info.get("left_offset", 0))
+            track = info.get("trackId", "")
+            bin_id = info.get("binId", "")
+            in_pt = int(info.get("in", 0))
+            out_pt = int(info.get("out", 0))
+            max_dur = int(info.get("maxDuration", 0))
+
+            url = info.get("url", "")
 
             lines = [
                 f"**Name:** {name}",
@@ -151,8 +149,12 @@ def register(mcp, helpers):
                 f"**Start:** {helpers.format_tc(s, fps)} (frame {s})",
                 f"**End:** {helpers.format_tc(e, fps)} (frame {e})",
                 f"**Duration:** {d} frames",
-                f"**In-point:** {in_pt} frames",
+                f"**Source in:** {helpers.format_tc(in_pt, fps)} (frame {in_pt})",
+                f"**Source out:** {helpers.format_tc(out_pt, fps)} (frame {out_pt})",
+                f"**Max duration:** {helpers.format_tc(max_dur, fps)} ({max_dur} frames)",
+                f"**Source range:** Using frames {in_pt}–{out_pt} of {max_dur} total",
                 f"**bin_id:** {bin_id}",
+                f"**Source:** {url}",
             ]
             return "\n".join(lines)
         except Exception as e:
@@ -190,13 +192,29 @@ def register(mcp, helpers):
         Returns a table of inserted clips.
         """
         try:
-            tl = helpers.get_timeline(ctx)
+            resolve = helpers.get_resolve(ctx)
+            dbus = resolve._dbus
             fps = helpers.get_fps(ctx)
-            items = tl.InsertClipsSequentially(bin_ids, track_id, start_position)
-            if not items:
-                return "ERROR: No clips inserted."
-            table = helpers.clips_table(items, fps)
-            return f"Appended {len(items)} clip(s):\n\n{table}"
+            clip_ids = dbus.insert_clips_sequentially(bin_ids, track_id, start_position)
+            if not clip_ids:
+                return "ERROR: No clips inserted. Check that bin_ids are valid."
+
+            # Report per-clip results
+            rows = ["| # | bin_id | clip_id | status |",
+                    "|---|--------|---------|--------|"]
+            ok_count = 0
+            for i, (bid, cid) in enumerate(zip(bin_ids, clip_ids)):
+                if cid == -1:
+                    rows.append(f"| {i} | {bid} | -- | FAILED |")
+                else:
+                    rows.append(f"| {i} | {bid} | {cid} | ok |")
+                    ok_count += 1
+            # bin_ids longer than clip_ids means those were never attempted
+            for i in range(len(clip_ids), len(bin_ids)):
+                rows.append(f"| {i} | {bin_ids[i]} | -- | FAILED |")
+
+            table = "\n".join(rows)
+            return f"Appended {ok_count}/{len(bin_ids)} clip(s) on track {track_id}:\n\n{table}"
         except Exception as e:
             return f"ERROR: {e}"
 
@@ -271,6 +289,34 @@ def register(mcp, helpers):
                 return f"ERROR: Could not split clip {clip_id} at frame {frame}"
             tc = helpers.format_tc(frame, fps)
             return f"Split clip {clip_id} at {tc} (frame {frame})"
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    @mcp.tool()
+    def slip_clip(ctx: Context, clip_id: int, offset: int) -> str:
+        """Slip a clip's source in/out points by offset frames.
+
+        Moves the source media window without changing the clip's position
+        or duration on the timeline. Positive offset = later in source,
+        negative = earlier.
+
+        Args:
+            clip_id: Timeline clip ID.
+            offset: Number of frames to slip (positive or negative).
+        """
+        try:
+            resolve = helpers.get_resolve(ctx)
+            ok = resolve._dbus.slip_clip(clip_id, offset)
+            if not ok:
+                return f"ERROR: Could not slip clip {clip_id} by {offset} frames"
+            # Show updated in/out
+            info = resolve._dbus.get_timeline_clip_info(clip_id)
+            fps = helpers.get_fps(ctx)
+            src_in = info.get("in", "?")
+            src_out = info.get("out", "?")
+            tc_in = helpers.format_tc(int(src_in), fps) if src_in != "?" else "?"
+            tc_out = helpers.format_tc(int(src_out), fps) if src_out != "?" else "?"
+            return f"Slipped clip {clip_id} by {offset} frames. New source range: {tc_in} – {tc_out}"
         except Exception as e:
             return f"ERROR: {e}"
 

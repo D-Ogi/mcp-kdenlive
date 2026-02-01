@@ -94,3 +94,23 @@ def register(mcp, helpers):
             return f"Set opacity {opacity:.0%} on clip {clip_id}"
         except Exception as e:
             return f"ERROR: {e}"
+
+    @mcp.tool()
+    def fill_frame(ctx: Context, clip_id: int) -> str:
+        """Scale a timeline clip to fill the project frame (remove black bars).
+
+        Auto-detects source resolution, calculates scale-to-fill with center crop,
+        and applies a qtblend effect. No distortion — aspect ratio is preserved,
+        excess is cropped equally from both sides.
+
+        Args:
+            clip_id: Timeline clip ID.
+        """
+        try:
+            resolve = helpers.get_resolve(ctx)
+            ok = resolve._dbus.fill_frame(clip_id)
+            if not ok:
+                return f"ERROR: Could not fill frame for clip {clip_id} (already matching or clip not found)"
+            return f"Applied fill-frame to clip {clip_id}"
+        except Exception as e:
+            return f"ERROR: {e}"
