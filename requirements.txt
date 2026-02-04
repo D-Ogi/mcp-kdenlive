@@ -1,2 +1,0 @@
-mcp>=1.0.0
-kdenlive-api @ git+https://github.com/D-Ogi/kdenlive-api.git
