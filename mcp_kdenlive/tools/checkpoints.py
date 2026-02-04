@@ -1,4 +1,4 @@
-"""Checkpoint tools: save/restore project state via SaveAs to temp paths."""
+"""Checkpoint and undo/redo tools: state management for the project."""
 
 from __future__ import annotations
 
@@ -78,5 +78,80 @@ def register(mcp, helpers):
                 return f"ERROR: Could not load checkpoint {ckpt_path}"
 
             return f"Restored checkpoint '{label}' from {ckpt_path}"
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    @mcp.tool()
+    def undo(ctx: Context, steps: int = 1) -> str:
+        """Undo the last operation(s) in Kdenlive.
+
+        Args:
+            steps: Number of operations to undo (default 1).
+        """
+        try:
+            resolve = helpers.get_resolve(ctx)
+            ok = resolve._dbus.undo(steps)
+            if ok:
+                status = resolve._dbus.undo_status()
+                undo_text = status.get("undo_text", "")
+                idx = status.get("index", "?")
+                count = status.get("count", "?")
+                msg = f"Undid {steps} operation(s). Stack position: {idx}/{count}."
+                if undo_text:
+                    msg += f" Next undo: \"{undo_text}\""
+                return msg
+            return "Nothing to undo."
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    @mcp.tool()
+    def redo(ctx: Context, steps: int = 1) -> str:
+        """Redo previously undone operation(s) in Kdenlive.
+
+        Args:
+            steps: Number of operations to redo (default 1).
+        """
+        try:
+            resolve = helpers.get_resolve(ctx)
+            ok = resolve._dbus.redo(steps)
+            if ok:
+                status = resolve._dbus.undo_status()
+                redo_text = status.get("redo_text", "")
+                idx = status.get("index", "?")
+                count = status.get("count", "?")
+                msg = f"Redid {steps} operation(s). Stack position: {idx}/{count}."
+                if redo_text:
+                    msg += f" Next redo: \"{redo_text}\""
+                return msg
+            return "Nothing to redo."
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    @mcp.tool()
+    def undo_status(ctx: Context) -> str:
+        """Show current undo/redo status: what can be undone/redone and stack depth."""
+        try:
+            resolve = helpers.get_resolve(ctx)
+            status = resolve._dbus.undo_status()
+            if not status:
+                return "No undo stack available."
+
+            can_undo = status.get("can_undo", "false")
+            can_redo = status.get("can_redo", "false")
+            undo_text = status.get("undo_text", "")
+            redo_text = status.get("redo_text", "")
+            idx = status.get("index", "0")
+            count = status.get("count", "0")
+
+            lines = [f"Stack position: {idx}/{count}"]
+            if can_undo == "true":
+                lines.append(f"Can undo: \"{undo_text}\"")
+            else:
+                lines.append("Can undo: no")
+            if can_redo == "true":
+                lines.append(f"Can redo: \"{redo_text}\"")
+            else:
+                lines.append("Can redo: no")
+            return "\n".join(lines)
         except Exception as e:
             return f"ERROR: {e}"

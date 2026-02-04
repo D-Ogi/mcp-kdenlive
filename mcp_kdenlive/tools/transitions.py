@@ -72,3 +72,55 @@ def register(mcp, helpers):
             return f"Removed transition from clip {clip_id}"
         except Exception as e:
             return f"ERROR: {e}"
+
+    @mcp.tool()
+    def get_available_transitions(ctx: Context) -> str:
+        """List all available transition types for mixes and compositions.
+
+        Returns a markdown table: id | name
+        """
+        try:
+            resolve = helpers.get_resolve(ctx)
+            transitions = resolve._dbus.get_available_transitions()
+            if not transitions:
+                return "No transitions found."
+            lines = ["| id | name |", "|----|------|"]
+            for t in transitions:
+                lines.append(f"| {t.get('id', '')} | {t.get('name', '')} |")
+            return f"{len(transitions)} transitions:\n\n" + "\n".join(lines)
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    @mcp.tool()
+    def get_mix_params(ctx: Context, clip_id: int) -> str:
+        """Get parameters of a mix/transition on a clip.
+
+        Args:
+            clip_id: Timeline clip ID that has a mix on its edge.
+        """
+        try:
+            resolve = helpers.get_resolve(ctx)
+            params = resolve._dbus.get_mix_params(clip_id)
+            if not params:
+                return f"No mix found on clip {clip_id}"
+            lines = [f"- **{k}:** {v}" for k, v in params.items()]
+            return "\n".join(lines)
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    @mcp.tool()
+    def set_mix_duration(ctx: Context, clip_id: int, duration: int) -> str:
+        """Change the duration of a mix/transition.
+
+        Args:
+            clip_id: Timeline clip ID with a mix.
+            duration: New mix duration in frames.
+        """
+        try:
+            resolve = helpers.get_resolve(ctx)
+            ok = resolve._dbus.set_mix_duration(clip_id, duration)
+            if not ok:
+                return f"ERROR: Could not set mix duration for clip {clip_id}"
+            return f"Mix duration on clip {clip_id} set to {duration} frames"
+        except Exception as e:
+            return f"ERROR: {e}"

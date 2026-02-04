@@ -65,11 +65,12 @@ def clips_table(items: list, fps: float = 25.0, show_transition: bool = False) -
 
     lines = [header, sep]
     for i, item in enumerate(items):
-        s = item.GetStart()
-        e = item.GetEnd()
-        d = item.GetDuration()
-        name = item.GetName()
-        row = f"| {i} | {item.clip_id} | {format_tc(s, fps)} | {format_tc(e, fps)} | {d} | {name} |"
+        s = item.GetStart() if hasattr(item, "GetStart") else 0
+        e = item.GetEnd() if hasattr(item, "GetEnd") else 0
+        d = item.GetDuration() if hasattr(item, "GetDuration") else 0
+        name = item.GetName() if hasattr(item, "GetName") else ""
+        cid = getattr(item, "clip_id", "")
+        row = f"| {i} | {cid} | {format_tc(s, fps)} | {format_tc(e, fps)} | {d} | {name} |"
         if show_transition:
             row = row[:-1] + " -- |"
         lines.append(row)
@@ -83,10 +84,12 @@ def media_table(items: list, fps: float = 25.0) -> str:
     lines = [header, sep]
     for item in items:
         props = item.GetClipProperty(None) if hasattr(item, "GetClipProperty") else {}
-        bin_id = item.bin_id if hasattr(item, "bin_id") else item.GetMediaId()
-        name = item.GetName()
+        bin_id = getattr(item, "bin_id", None)
+        if bin_id is None:
+            bin_id = item.GetMediaId() if hasattr(item, "GetMediaId") else ""
+        name = item.GetName() if hasattr(item, "GetName") else ""
         mtype = props.get("type", "video") if isinstance(props, dict) else "video"
-        dur = item.GetDuration()
+        dur = item.GetDuration() if hasattr(item, "GetDuration") else 0
         tc = format_tc(dur, fps)
         lines.append(f"| {bin_id} | {name} | {mtype} | {dur} | {tc} |")
     return "\n".join(lines)
@@ -109,10 +112,28 @@ def markers_table(markers: dict, fps: float = 25.0) -> str:
     return "\n".join(lines)
 
 
+def compositions_table(compositions: list, fps: float = 25.0) -> str:
+    """Build a markdown table from a list of composition dicts."""
+    header = "| id | type | track_id | start | end | dur |"
+    sep = "|----|------|----------|-------|-----|-----|"
+    lines = [header, sep]
+    for c in compositions:
+        cid = c.get("id", "")
+        ctype = c.get("type", "")
+        tid = c.get("trackId", "")
+        pos = int(c.get("position", 0))
+        dur = int(c.get("duration", 0))
+        end = pos + dur
+        start_tc = format_tc(pos, fps)
+        end_tc = format_tc(end, fps)
+        lines.append(f"| {cid} | {ctype} | {tid} | {start_tc} | {end_tc} | {dur} |")
+    return "\n".join(lines)
+
+
 def tracks_table(tracks: list) -> str:
     """Build a markdown table from GetAllTracksInfo() result."""
-    header = "| track_id | type | name | clips | total_frames |"
-    sep = "|----------|------|------|-------|--------------|"
+    header = "| track_id | type | name | clips | total_frames | mute |"
+    sep = "|----------|------|------|-------|--------------|------|"
     lines = [header, sep]
     for t in tracks:
         tid = t.get("id", t.get("track_id", ""))
@@ -121,5 +142,7 @@ def tracks_table(tracks: list) -> str:
         tname = t.get("name", "")
         nclips = t.get("clips", 0)
         total = t.get("total_frames", 0)
-        lines.append(f"| {tid} | {ttype} | {tname} | {nclips} | {total} |")
+        mute = t.get("mute")
+        mute_str = "yes" if mute in (True, "true") else "no"
+        lines.append(f"| {tid} | {ttype} | {tname} | {nclips} | {total} | {mute_str} |")
     return "\n".join(lines)
